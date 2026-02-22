@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Build script for CUDA Thrust examples in debug mode
+# CUDA 8, C++11, extended lambda support
+
+# Source file
+SRC="thrust_examples.cu"
+
+# Output binary
+OUT="thrust_examples_debug"
+
+# CUDA compiler
+NVCC="/usr/local/cuda-8.0/bin/nvcc"
+
+# Compiler flags
+CXXFLAGS="-std=c++11 --expt-extended-lambda -g -G -O0 -Xcompiler -Wall"
+
+echo "Building $SRC -> $OUT ..."
+$NVCC $CXXFLAGS $SRC -o $OUT
+
+if [ $? -eq 0 ]; then
+    echo "Build succeeded: ./$OUT"
+else
+    echo "Build failed"
+fi

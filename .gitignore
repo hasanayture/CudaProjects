@@ -1,0 +1,17 @@
+# Ignore binaries
+*.o
+*.out
+*.exe
+thrust_examples
+thrust_examples_debug
+
+# Ignore editor/IDE files
+*.swp
+*.DS_Store
+.vscode/
+.idea/
+
+# Ignore CUDA intermediate files
+*.ptx
+*.cubin
+*.log

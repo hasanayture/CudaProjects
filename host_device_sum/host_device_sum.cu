@@ -8,67 +8,52 @@
 #include <numeric>
 #include <chrono>
 
-constexpr unsigned long long N = 8'000'000;
-
-__device__ int device_square(int element_value) {
-    return element_value * element_value;
-}
-
-__global__ void kernel_square_array(int* device_vector_pointer, unsigned long long total_elements) {
-    unsigned long long thread_index = threadIdx.x + blockIdx.x * blockDim.x;
-    if(thread_index < total_elements) {
-        device_vector_pointer[thread_index] = device_square(device_vector_pointer[thread_index]);
-    }
-}
-
-struct SquarePlusOneFunctor {
+struct SquareThenDouble {
     __host__ __device__
-    int operator()(int element_value) const {
-        return element_value * element_value + 1;
+    unsigned long long operator()(unsigned long long x) const {
+        return x * x * 2;
     }
 };
 
-struct MultiplyByTwoFunctor {
-    __host__ __device__
-    int operator()(int element_value) const {
-        return element_value * 2;
-    }
-};
-
-void run_host_example() {
-    std::vector<int> host_vector(N);
+void run_host_example(const unsigned long long N) {
+    std::vector<unsigned long long> host_vector(N);
     for(unsigned long long i = 0; i < N; i++) host_vector[i] = i + 1;
+
+    //Warm up
+    volatile unsigned long long tmp{0ULL};
+    for(unsigned long long i = 0; i < N; i++)
+        tmp = host_vector[i] * host_vector[i] * 2;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    for(unsigned long long i = 0; i < N; i++) host_vector[i] *= host_vector[i];
-    for(unsigned long long i = 0; i < N; i++) host_vector[i] *= 2;
+    for(unsigned long long i = 0; i < N; i++)
+        host_vector[i] = host_vector[i] * host_vector[i] * 2;
 
-    long long total_sum = std::accumulate(host_vector.begin(), host_vector.end(), 0LL);
+    unsigned long long total_sum = std::accumulate(host_vector.begin(), host_vector.end(), 0ULL);
 
     auto end = std::chrono::high_resolution_clock::now();
     double duration_ms = std::chrono::duration<double, std::milli>(end - start).count();
 
+    //Print tmp variable for it to be not optimized
+    std::cout << "tmp: " << tmp << "\n";
     std::cout << "Host sum: " << total_sum << "\n";
     std::cout << "Host duration: " << duration_ms << " ms\n";
 }
 
-void run_device_example() {
-    thrust::host_vector<int> host_vector(N);
+void run_device_example(const unsigned long long N) {
+    thrust::host_vector<unsigned long long> host_vector(N);
     for(unsigned long long i = 0; i < N; i++) host_vector[i] = i + 1;
 
-    thrust::device_vector<int> device_vector = host_vector;
-    int* raw_ptr = thrust::raw_pointer_cast(device_vector.data());
+    thrust::device_vector<unsigned long long> device_vector = host_vector;
+
+    //Warm up
+    thrust::transform(device_vector.begin(), device_vector.end(), device_vector.begin(), SquareThenDouble());
+    thrust::reduce(device_vector.begin(), device_vector.end(), 0ULL, thrust::plus<unsigned long long>());
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    unsigned long long threads_per_block = 256;
-    unsigned long long num_blocks = (N + threads_per_block - 1) / threads_per_block;
-    kernel_square_array<<<num_blocks, threads_per_block>>>(raw_ptr, N);
-    cudaDeviceSynchronize();
-
-    thrust::transform(device_vector.begin(), device_vector.end(), device_vector.begin(), MultiplyByTwoFunctor());
-    long long total_sum = thrust::reduce(device_vector.begin(), device_vector.end(), 0LL, thrust::plus<long long>());
+    thrust::transform(device_vector.begin(), device_vector.end(), device_vector.begin(), SquareThenDouble());
+    unsigned long long total_sum = thrust::reduce(device_vector.begin(), device_vector.end(), 0ULL, thrust::plus<unsigned long long>());
 
     auto end = std::chrono::high_resolution_clock::now();
     double duration_ms = std::chrono::duration<double, std::milli>(end - start).count();
@@ -80,6 +65,8 @@ void run_device_example() {
 }
 
 int main() {
-    run_host_example();
-    run_device_example();
+    constexpr unsigned long long N = 100000000; // 100 million elements
+    run_host_example(N);
+    run_device_example(N);
+    return 0;
 }
